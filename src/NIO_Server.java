@@ -7,9 +7,12 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 public class NIO_Server {
@@ -44,7 +47,7 @@ public class NIO_Server {
                     hendlerAccetion (key, selector);
                 }
                 if(key.isReadable()){
-                    hendlerRead()
+                    hendlerRead(key, selector);
                 }
             }
             it.remove();
@@ -71,18 +74,95 @@ public class NIO_Server {
         String command = new String(buf, StandardCharsets.UTF_8)
                 .replace("\n", "")
                 .replace("\r", "");
-        System.out.println(command);
-        if (command.equals("--help")) {
+//        System.out.println(command);
+        String[] arrCommand = command.split(" ");
+        if (arrCommand[0].equals("--help")) {
             channel.write(ByteBuffer.wrap("input ls for show file list".getBytes()));
         }
-        if (command.equals("ls")) {
+        if (arrCommand[0].equals("ls")) {
             channel.write(ByteBuffer.wrap(getFilesList().getBytes()));
         }
-
+        if (arrCommand[0].equals("cd")) {
+            channel.write(ByteBuffer.wrap(changeDirectory(arrCommand[1]).getBytes()));
+        }
+        if (arrCommand[0].equals("touch")) {
+            channel.write(ByteBuffer.wrap(touch(arrCommand[1]).getBytes()));
+        }
+        if (arrCommand[0].equals("mkdir")) {
+            channel.write(ByteBuffer.wrap(makeDirectory(arrCommand[1]).getBytes()));
+        }
+        if (arrCommand[0].equals("rm")) {
+            channel.write(ByteBuffer.wrap(remove(arrCommand[1]).getBytes()));
+        }
+        if (arrCommand[0].equals("copy")) {
+            channel.write(ByteBuffer.wrap(copy(arrCommand[1], arrCommand[2]).getBytes()));
+        }
+        if (arrCommand[0].equals("cat")) {
+            channel.write(ByteBuffer.wrap(cat(arrCommand[1]).getBytes()));
+        }
     }
 
     private String getFilesList() {
-        return String.join(" ", new File(String.valueOf(rootPath)).list());
+        return String.join(" ", new File(rootPath.toString()).list());
+    }
+
+    public String changeDirectory(String dir) throws IOException {
+        Path newDir = Path.of(dir);
+        if (!Files.exists(newDir)) {
+            System.out.println("Такой директории не существует");
+            return rootPath.toString();
+        }
+        StringBuilder sb = new StringBuilder();
+        if (!Files.isDirectory(newDir)) {
+            for (int i = 0; i < newDir.getNameCount() - 1; i++) {
+                sb.append(newDir.getName(i) + "/");
+            }
+            currentPath = Path.of(sb.toString());
+            return sb.toString();
+        }
+        currentPath = Path.of(newDir.toString());
+        return newDir.toString();
+    }
+
+    public String touch(String name) throws IOException {
+        if (!Files.exists(Path.of(currentPath.toString(), name))) {
+            Files.createFile(Path.of(currentPath.toString(), name));
+            return "Файл успешно создан";
+        } else return "Такой файл уже существует";
+    }
+
+    public String makeDirectory(String name) throws IOException {
+        if (!Files.exists(Path.of(currentPath.toString() + "/" + name))) {
+            Files.createDirectory(Path.of(currentPath.toString() + "/" + name));
+            return "Директория успешно создан";
+        } else return "Такая директория уже существует";
+    }
+
+    public String remove(String name) throws IOException {
+        List<String> filesList = Arrays.asList(currentPath.toFile().list());
+        if (filesList == null) {
+            return "В данной директории нет файлов";
+        }
+        for (String file : filesList) {
+            if (file.equals(name)) {
+                Files.delete(Path.of(currentPath.toString(), file));
+                return String.format("Файл %s успешно удален", name);
+            }
+        }
+        return "В данной директории нет такого файла";
+    }
+
+    public String copy (String src, String target) throws IOException {
+        Files.copy(Path.of(currentPath.toString(), src), Path.of(target), StandardCopyOption.REPLACE_EXISTING);
+        return "Файл успешно скопирован";
+    }
+
+    public String cat(String name) throws IOException {
+        if (Files.exists(Path.of(currentPath.toString(), name))) {
+            if (Files.readString(Path.of(currentPath.toString(), name)) == null) return "Файл пустой";
+            return Files.readString(Path.of(currentPath.toString(), name));
+        }
+        return "В данной директории нет такого файла";
     }
 
 
